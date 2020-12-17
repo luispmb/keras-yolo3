@@ -2,6 +2,9 @@ import numpy as np
 import os
 import xml.etree.ElementTree as ET
 import pickle
+import json
+import os
+from os.path import join, dirname
 
 def parse_voc_annotation(ann_dir, img_dir, cache_name, labels=[]):
     if os.path.exists(cache_name):
@@ -15,47 +18,88 @@ def parse_voc_annotation(ann_dir, img_dir, cache_name, labels=[]):
         for ann in sorted(os.listdir(ann_dir)):
             img = {'object':[]}
 
-            try:
-                tree = ET.parse(ann_dir + ann)
-            except Exception as e:
-                print(e)
-                print('Ignore this bad annotation: ' + ann_dir + ann)
-                continue
-            
-            for elem in tree.iter():
-                if 'filename' in elem.tag:
-                    img['filename'] = img_dir + elem.text
-                if 'width' in elem.tag:
-                    img['width'] = int(elem.text)
-                if 'height' in elem.tag:
-                    img['height'] = int(elem.text)
-                if 'object' in elem.tag or 'part' in elem.tag:
-                    obj = {}
-                    
-                    for attr in list(elem):
-                        if 'name' in attr.tag:
-                            obj['name'] = attr.text
+            if ann.endswith('.xml'):
+                print('annotation in xml')
+                
+                try:
+                    tree = ET.parse(ann_dir + ann)
+                except Exception as e:
+                    print(e)
+                    print('Ignore this bad annotation: ' + ann_dir + ann)
+                    continue
 
-                            if obj['name'] in seen_labels:
-                                seen_labels[obj['name']] += 1
-                            else:
-                                seen_labels[obj['name']] = 1
-                            
-                            if len(labels) > 0 and obj['name'] not in labels:
-                                break
-                            else:
-                                img['object'] += [obj]
-                                
-                        if 'bndbox' in attr.tag:
-                            for dim in list(attr):
-                                if 'xmin' in dim.tag:
-                                    obj['xmin'] = int(round(float(dim.text)))
-                                if 'ymin' in dim.tag:
-                                    obj['ymin'] = int(round(float(dim.text)))
-                                if 'xmax' in dim.tag:
-                                    obj['xmax'] = int(round(float(dim.text)))
-                                if 'ymax' in dim.tag:
-                                    obj['ymax'] = int(round(float(dim.text)))
+                for elem in tree.iter():
+                    if 'filename' in elem.tag:
+                        img['filename'] = img_dir + elem.text
+                    if 'width' in elem.tag:
+                        img['width'] = int(elem.text)
+                    if 'height' in elem.tag:
+                        img['height'] = int(elem.text)
+                    if 'object' in elem.tag or 'part' in elem.tag:
+                        obj = {}
+
+                        for attr in list(elem):
+                            if 'name' in attr.tag:
+                                obj['name'] = attr.text
+
+                                if obj['name'] in seen_labels:
+                                    seen_labels[obj['name']] += 1
+                                else:
+                                    seen_labels[obj['name']] = 1
+
+                                if len(labels) > 0 and obj['name'] not in labels:
+                                    break
+                                else:
+                                    img['object'] += [obj]
+
+                            if 'bndbox' in attr.tag:
+                                for dim in list(attr):
+                                    if 'xmin' in dim.tag:
+                                        obj['xmin'] = int(round(float(dim.text)))
+                                    if 'ymin' in dim.tag:
+                                        obj['ymin'] = int(round(float(dim.text)))
+                                    if 'xmax' in dim.tag:
+                                        obj['xmax'] = int(round(float(dim.text)))
+                                    if 'ymax' in dim.tag:
+                                        obj['ymax'] = int(round(float(dim.text)))
+                                        
+            elif ann.endswith('.json'):
+                print('annotation in json')                
+
+                annot_path = join(ann_dir, ann)
+                with open(annot_path) as f:
+                  annot = json.load(f)
+                
+                img = {}
+                
+                #parent_dir = dirname(ann_dir)
+                filename = join(img_dir, annot['filename'])
+                print('filename', filename)
+                
+                #img['filename'] = annot['filename']
+                img['filename'] = filename
+                img['width'] = annot['size']['width']
+                img['height'] = annot['size']['height']
+                
+                img['object'] = []
+                for item in annot['object']:
+                    
+                    if item['name'] in seen_labels:
+                        seen_labels[item['name']] += 1
+                    else:
+                        seen_labels[item['name']] = 1
+                
+                    if len(labels) > 0 and item['name'] not in labels:
+                        break
+                    
+                    obj = {}
+                    obj['name'] = item['name']
+                    obj['xmin'] = item['bndbox']['xmin']
+                    obj['xmax'] = item['bndbox']['xmax']
+                    obj['ymin'] = item['bndbox']['ymin']
+                    obj['ymax'] = item['bndbox']['ymax']
+                    img['object'].append(obj)
+             
 
             if len(img['object']) > 0:
                 all_insts += [img]
